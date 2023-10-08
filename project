@@ -1,0 +1,146 @@
+import numpy as np
+import random
+import math
+import matplotlib.pyplot as plt
+
+# Functions
+# Logistic map
+def f(x):
+  a=3.7
+  y=a*x*(1-x)
+  return y
+
+def rand_sign():
+    ret = random.randint(0,1)
+    if ret == 0:
+        ret = -1
+    return ret
+
+def randw_fb(n, b): # random w_fb
+    ret = np.empty(n)
+    for i in range(len(ret)):
+        ret[i] = rand_sign()* b
+    return ret
+
+def W(R,N):
+  ##N: Node, R: Spectral Radius
+  data = np.zeros([N,N])
+  for i in range (0,N):
+    for j in range (i,N):
+      data[i][j] = random.uniform(100000*R, 0)
+
+  for i in range (0,N):
+    if i == 0:
+      data[0][0] = R
+    else:
+      data[i][i] = random.uniform(R, 0)
+  return data
+
+def jud(a):#Error check, judgement
+  if a < 10 ** (-1.6):
+    return True
+  else:
+    return False
+
+##############プログラムはここから################
+
+##Step 0
+# Paramtersの設定
+#random.seed(1) #Seed-> Fixing the random value
+N = 5 #Node
+R = 3.5 #Spectral Radius
+b = 0.3
+
+w_fb= randw_fb(N,b) # N個の ランダムb, -bの要素をもつベクトル
+
+T_0= 500
+T_1= 1000
+T_2= 2000
+
+#Setting initial condition
+x = [random.random()] 
+W = W(R,N) 
+r = [[random.uniform(10000, -10000) for _ in range (0,N)]]
+
+##Step 1-1
+for i in range(0,T_1+1):#0よりT_1秒までのrの時系列
+  x.append(f(x[i]))
+  val = [0 for _ in range (0,N)]
+  for j in range (0,N):
+    for k in range (0,N):
+        val[j] += W[j][k] * r[i][k]
+    val[j] += x[i] * (w_fb[j])
+    val[j] = np.tanh(val[j])
+  r.append(val)
+
+##1-2は2-1以降のことを方針
+
+##Step 2-1
+#initialize x(0), r(0), please describe it, parkさん.
+x1 = [random.random()]
+r1 = [[random.uniform(1, -1) for _ in range (0,N)]]
+for i in range(0,T_1):
+  x1.append(f(x1[i]))
+  val = [0 for _ in range (0,N)]
+  for j in range (0,N):
+    for k in range (0,N):
+        val[j] += W[j][k] * r1[i][k]
+    val[j] += w_fb[j] * x1[i] 
+    val[j] = np.tanh(val[j])
+  r1.append(val)
+x1_t = x1[T_0 + 1:T_1 + 1] #新しく設定したx,rの下での結果
+r1_t = r1[T_0 + 1:T_1 + 1] #x1,r1から時刻T_0 + 1からT_1までを取り出す
+
+
+##Step 2-2
+R_mat = []
+for i in range (0,len(r1_t)):
+  R_mat.append(r1_t[i])
+R_mat = np.array(R_mat)
+R_tran = np.transpose(R_mat) #R_mat: R, R_tran: transpose of R_mat in paper
+R_pro = np.dot(R_tran,R_mat)
+R_re = np.linalg.pinv(R_pro)
+W_out = np.dot(np.dot(R_re,R_tran),x1_t) #Using the other way to find W_out
+
+w_out_rt = np.empty(T_1-T_0) #w_out_rtはw_outとr1(t)の掛け算
+for i in range (0,T_1-T_0):
+  w_out_rt[i] = np.dot(W_out,r1_t[i])
+
+#Checking error, |w_out * r(t+1) - f(w_out * r(t))| ; ここで誤差を測定する
+error = 0 
+for i in range (0,len(w_out_rt)-1):
+  error += math.fabs(w_out_rt[i+1] - f(w_out_rt[i]))
+error /= len(w_out_rt)-1 
+
+#Adding datas via w_out without x(t) (Ignore the error in here)
+for i in range (T_1,T_2):
+  x1.append(f(x1[i]))
+  val = [0 for _ in range (0,N)]
+  for j in range (0,N):
+    for k in range (0,N):
+        val[j] += W[j][k] * r1[i][k]
+    val[j] += w_fb[j] * W_out[j] * r1[i][j]
+    val[j] = np.tanh(val[j])
+  r1.append(val)
+
+##Theorical data by logistic map, Virtualize the data in here.
+x_np = np.array(x1)
+time = np.arange(0,len(x_np),1)
+
+##Learned data by our strategy, optimize the learned data to theorical data.
+r1_np = np.empty(len(r1)-1)
+r1_np_t = np.empty(len(r1)-1)
+for i in range (1,len(r1)-1):
+   r1_np[i] = np.dot(W_out,r1[i])
+   r1_np_t[i] = np.dot(W_out,r1[i+1])
+
+a1 = np.linspace(0,1,100)
+b1 = 3.7 * a1 * (1-a1)
+
+##Virtualize datas, learned data and error
+print(error)
+plt.plot(a1, b1)
+plt.scatter(r1_np,r1_np_t,s = 5,color = 'red')
+
+plt.axis([0, 1, 0, 1])
+plt.show()
